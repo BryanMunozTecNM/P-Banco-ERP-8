@@ -1,10 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html>
-<html>
+PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:c="http://java.sun.com/jsp/jstl/core">
+    
     <head>
-        <title>Start Page</title>
-        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+        <title>Equipo 8</title>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
+              integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous" />
+        <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"
+                integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo"
+        crossorigin="anonymous"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"
+                integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1"
+        crossorigin="anonymous"></script>
+        <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"
+                integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM"
+        crossorigin="anonymous"></script>
+        <style type="text/css">
+            body {
+                background-color: #ECF0F1;
+                /* Color de fondo */
+            }
+        </style>
     </head>
+    
     <body>
-        <h1>Hello World!</h1>
+        <center>
+            <h1>Banco ERP</h1>
+            <script>
+                window.onload = function () {
+                    // Limpiar los parámetros de la URL
+                    const url = new URL(window.location.href);
+                    url.searchParams.delete('successMessage');
+                    url.searchParams.delete('errorMessageL');
+                    url.searchParams.delete('errorMessageR');
+                    url.searchParams.delete('duplicateMessage');
+                    window.history.replaceState({}, document.title, url);
+                };
+            </script>
+            <div class="container">
+                <div class="row">
+                    <div class="col-md-6"> <!-- Primera columna para Ingresar -->
+                        <form action="servlet1" method="POST">
+                            <div class="form-group">
+                                <h3>Ingresar a una Cuenta Existente</h3>
+                            </div>
+                            <div class="form-group">
+                                <label>Ingresa el ID de cuenta</label>
+                                <input type="text" name="accid" class="form-control" placeholder="ID" />
+                            </div>
+                            <div class="form-group">
+                                <label>Ingresa la clave de cuenta</label>
+                                <input type="password" name="accpass" class="form-control" placeholder="Clave" />
+                            </div>
+                            <!-- Aquí se mostrará el mensaje de error -->
+                            <h7 style="color: red;">
+                                <c:if test="${not empty param.errorMessageL}">
+                                    ${param.errorMessageL}
+                                </c:if>
+                            </h7>
+                            <div class="form-group">
+                                <button type="submit" class="btn btn-success">Ingresar</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div class="col-md-6"> <!-- Segunda columna para Registrar -->
+                        <form action="registerServlet" method="POST">
+                            <div class="form-group">
+                                <h3>Registrar una Cuenta Nueva</h3>
+                            </div>
+                            <div class="form-group">
+                                <label>Registre el ID de cuenta</label>
+                                <input type="text" name="accid" class="form-control" placeholder="ID" />
+                            </div>
+                            <div class="form-group">
+                                <label>Registre la clave de cuenta</label>
+                                <input type="password" name="accpass" class="form-control" placeholder="Clave" />
+                            </div>
+                            <!-- Mostrar mensajes de éxito o error -->
+                            <h7 style="color: green;">
+                                <c:if test="${not empty param.successMessage}">
+                                    ${param.successMessage}
+                                </c:if>
+                            </h7>
+                            <h7 style="color: red;">
+                                <c:if test="${not empty param.errorMessageR}">
+                                    ${param.errorMessageR}
+                                </c:if>
+                            </h7>
+                            <h7 style="color: red;">
+                                <c:if test="${not empty param.duplicateMessage}">
+                                    ${param.duplicateMessage}
+                                </c:if>
+                            </h7>
+                            <div class="form-group">
+                                <button type="submit" class="btn btn-success">Registrar</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </center>
     </body>
 </html>
