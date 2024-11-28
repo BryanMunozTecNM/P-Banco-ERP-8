@@ -25,21 +25,34 @@ import java.util.List;
 @Path("json")
 
 public class EndpointsJSON {
+    
     private Connection connect() throws SQLException {
+        try {
+            // Cargar el controlador JDBC para MySQL
+            Class.forName("com.mysql.cj.jdbc.Driver");
+        } catch (ClassNotFoundException e) {
+            throw new SQLException("No se pudo encontrar el controlador JDBC para MySQL.", e);
+        }
+    
+        // Establecer la conexión con la base de datos
         return DriverManager.getConnection("jdbc:mysql://localhost/bar", "root", "");
     }
 
+// Texto Plano    
+    
     @GET
     @Produces(MediaType.TEXT_PLAIN)
-    public Response getJsonInfo() {
+    public Response json() {
         String message = "Consumo y Produccion de JSON";
         return Response.ok(message).build();
     }
 
+//TODO GET   
+    
     @GET
-    @Path("all_cuentasysaldo")  
+    @Path("get/todo/saldos")  
     @Produces(MediaType.APPLICATION_JSON)
-    public Response getAllAccounts() {
+    public Response getTodoSaldos() {
         List<Account> accounts = new ArrayList<>();
         String sql = "SELECT * FROM account_balance"; 
 
@@ -60,36 +73,19 @@ public class EndpointsJSON {
         return Response.ok(accounts).build();
     }
 
-    @POST
-    @Consumes(MediaType.APPLICATION_JSON)
-    @Produces(MediaType.APPLICATION_JSON)
-    public Response createAccount(Account account) {
-        String sql = "INSERT INTO account_balance (accid, balance) VALUES (?, ?)";
-
-        try (Connection conn = connect();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            stmt.setString(1, account.getAccid());
-            stmt.setDouble(2, account.getBalance());
-            stmt.executeUpdate();
-        } catch (SQLException e) {
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(e.getMessage()).build();
-        }
-
-        return Response.status(Response.Status.CREATED).entity(account).build();
-    }
+//INDIVIDUAL GET
 
     @GET
-    @Path("consultar/{id}")
+    @Path("get/individual/{accid}")
     @Produces(MediaType.APPLICATION_JSON)
-    public Response getAccount(@PathParam("id") String id) {
+    public Response getIndividualAccid(@PathParam("accid") String accid) {
         Account account = new Account();
         String sql = "SELECT * FROM account_balance WHERE accid = ?";
 
         try (Connection conn = connect();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
 
-            stmt.setString(1, id);
+            stmt.setString(1, accid);
             ResultSet rs = stmt.executeQuery();
 
             if (rs.next()) {
@@ -104,55 +100,12 @@ public class EndpointsJSON {
         }
 
         return Response.ok(account).build();
-    }
-
-    @PUT
-    @Path("{id}")
-    @Consumes(MediaType.APPLICATION_JSON)
-    public Response updateAccount(@PathParam("id") String id, Account account) {
-        String sql = "UPDATE account_balance SET balance = ? WHERE accid = ?";
-
-        try (Connection conn = connect();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            stmt.setDouble(1, account.getBalance());
-            stmt.setString(2, id);
-            int rowsUpdated = stmt.executeUpdate();
-
-            if (rowsUpdated == 0) {
-                return Response.status(Response.Status.NOT_FOUND).build();
-            }
-        } catch (SQLException e) {
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(e.getMessage()).build();
-        }
-
-        return Response.noContent().build();
-    }
-
-    @DELETE
-    @Path("{id}")
-    public Response deleteAccount(@PathParam("id") String id) {
-        String sql = "DELETE FROM account_balance WHERE accid = ?";
-
-        try (Connection conn = connect();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            stmt.setString(1, id);
-            int rowsDeleted = stmt.executeUpdate();
-
-            if (rowsDeleted == 0) {
-                return Response.status(Response.Status.NOT_FOUND).build();
-            }
-        } catch (SQLException e) {
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(e.getMessage()).build();
-        }
-
-        return Response.noContent().build();
-    }
+    }        
 
     // Clase interna para representar la entidad Account
     public static class Account {
         private String accid;
+        private String accpass;
         private double balance;
 
         public String getAccid() {
@@ -163,6 +116,10 @@ public class EndpointsJSON {
             this.accid = accid;
         }
 
+  public void setAccpass(String accid) {
+            this.accpass = accpass;
+        }
+ 
         public double getBalance() {
             return balance;
         }
