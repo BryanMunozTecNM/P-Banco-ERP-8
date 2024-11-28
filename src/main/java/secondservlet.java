@@ -58,10 +58,10 @@ Connection con; // Variable de instancia
             ex.printStackTrace();
         }
 
-        out.println("<form action='faces/index.xhtml' method='get'>");
+ /*       out.println("<form action='' method='get'>");
         out.println("<input type='submit' value='Volver a Inicio'>");
         out.println("</form>");
-
+*/
         out.println("<html>");
         out.println("<body bgcolor='#ECF0F1'>");
         out.println("<center>");
