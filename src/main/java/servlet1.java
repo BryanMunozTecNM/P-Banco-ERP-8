@@ -54,11 +54,16 @@ public class servlet1 extends HttpServlet {
                 }
                 dispatcher.forward(request, response);
                 con.close();
-            } else {
-                // En lugar de imprimir el mensaje en una nueva ventana, redirige a index.xhtml
-                String errorMessageL = "ID de cuenta y/o clave incorrecto(s)";
-                response.sendRedirect("faces/index.xhtml?errorMessageL=" + URLEncoder.encode(errorMessageL, "UTF-8"));
-            }
+        } else {
+            out = response.getWriter();
+            response.setContentType("text/html");
+            out.println("<html>");
+            out.println("<body bgcolor='#ECF0F1'>");
+            out.println("ID de cuenta y/o clave no válido(s)");
+            out.println("</body>");
+            out.println("</html>");
+            out.close();
+        }
 
         } catch (ClassNotFoundException ex) {
             ex.printStackTrace();

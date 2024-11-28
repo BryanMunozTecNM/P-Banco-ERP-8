@@ -44,11 +44,15 @@ public class registerServlet extends HttpServlet {
             rs.next();
             int count = rs.getInt(1);
 
-            if (count > 0) {
-                // Si el accid ya existe, mostrar mensaje de error
-                String duplicateMessage = "Error: El ID de cuenta que ingresaste ya está dentro del sistema, ingresa un ID de cuenta diferente.";
-                response.sendRedirect(
-                        "faces/index.xhtml?duplicateMessage=" + URLEncoder.encode(duplicateMessage, "UTF-8"));
+             if (count > 0) {
+                 // Si el accid ya existe, mostrar mensaje de error
+                 out = response.getWriter();
+                 response.setContentType("text/html");
+                 out.println("<html>");
+                 out.println("<body bgcolor='#ECF0F1'>");
+                 out.println("Error: El ID de cuenta que ingresaste ya está dentro del sistema, ingresa un ID de cuenta diferente");
+                 out.println("</body>");
+                 out.println("</html>");
             } else {
                 // Si no existe, proceder con la inserción
                 pst = con.prepareStatement("INSERT INTO login (accid, accpass) VALUES (?, ?)");
@@ -82,11 +86,14 @@ public class registerServlet extends HttpServlet {
                         int transactionRowsAffected = pst.executeUpdate();
 
                         // Mensaje de éxito
-                        if (transactionRowsAffected > 0) {
-                            // Mensaje de éxito
-                            String successMessage = "Registro realizado exitosamente.";
-                            response.sendRedirect(
-                                    "faces/index.xhtml?successMessage=" + URLEncoder.encode(successMessage, "UTF-8"));
+                         if (transactionRowsAffected > 0) {
+                             out = response.getWriter();
+                             response.setContentType("text/html");
+                             out.println("<html>");
+                             out.println("<body bgcolor='#ECF0F1'>");
+                             out.println("Registro realizado exitosamente.");
+                             out.println("</body>");
+                             out.println("</html>");
                         } else {
                             // Error al insertar en transactions
                             out = response.getWriter();
@@ -107,11 +114,16 @@ public class registerServlet extends HttpServlet {
                         out.println("</body>");
                         out.println("</html>");
                     }
-                } else {
-                    // Si no se afectaron filas
-                    String errorMessageR = "Error al registrarse.";
-                    response.sendRedirect("faces/index.xhtml?errorMessageR=" + URLEncoder.encode(errorMessageR, "UTF-8"));
-                }
+                 } else {
+                     // Si no se afectaron filas
+                     out = response.getWriter();
+                     response.setContentType("text/html");
+                     out.println("<html>");
+                     out.println("<body bgcolor='#ECF0 F1'>");
+                     out.println("Error al registrarse.");
+                     out.println("</body>");
+                     out.println("</html>");
+                 }
             }
 
             // Cerrar la conexión
