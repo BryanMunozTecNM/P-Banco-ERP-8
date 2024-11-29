@@ -50,7 +50,7 @@ public class EndpointsJSON {
         return Response.ok(message).build();
     }
 
-//TODO GET   
+//TODO PRUEBA PERSONAL
     
     @GET
     @Path("get/saldo/todo")  
@@ -75,36 +75,7 @@ public class EndpointsJSON {
 
         return Response.ok(accounts).build();
     }
-
-//INDIVIDUAL GET
-
-    @GET
-    @Path("get/saldo/{accid}")
-    @Produces(MediaType.APPLICATION_JSON)
-    public Response getSaldoAccid(@PathParam("accid") String accid) {
-        Account account = new Account();
-        String sql = "SELECT * FROM account_balance WHERE accid = ?";
-
-        try (Connection conn = connect();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-
-            stmt.setString(1, accid);
-            ResultSet rs = stmt.executeQuery();
-
-            if (rs.next()) {
-                account = new Account();
-                account.setAccid(rs.getString("accid"));
-                account.setBalance(rs.getDouble("balance"));
-            } /*else {
-                return Response.status(Response.Status.NOT_FOUND).build();
-            }*/
-        } catch (SQLException e) {
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(e.getMessage()).build();
-        }
-
-        return Response.ok(account).build();
-    }       
-    
+  
     // Endpoint para registrar una nueva cuenta
     @POST
     @Path("register")
@@ -146,7 +117,7 @@ public class EndpointsJSON {
             insertTransactionStmt.setString(5, "register");
             insertTransactionStmt.executeUpdate();
 
-            return Response.status(Response.Status.CREATED).entity(account).build();
+            return Response.status(Response.Status.CREATED).entity("Registro realizado exitosamente.").build();
         } catch (SQLException e) {
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(e.getMessage()).build();
         }
@@ -467,20 +438,20 @@ public class EndpointsJSON {
 
 // Endpoint para realizar un depósito y cargo simultáneamente
 @POST
-@Path("transfer")
+@Path("pay")
 @Consumes(MediaType.APPLICATION_JSON)
 @Produces(MediaType.APPLICATION_JSON)
-public Response transfer(TransferRequest transferRequest) {
+public Response pay(PayRequest payRequest) {
     // Validar que el monto sea un número mayor o igual a 0
-    if (transferRequest.getMount() < 0) {
+    if (payRequest.getMount() < 0) {
         return Response.status(Response.Status.BAD_REQUEST).entity("El monto debe ser mayor o igual a 0.").build();
     }
 
     try (Connection conn = connect()) {
         // Verificar que el primer accid y accpass sean correctos
         PreparedStatement checkStmt1 = conn.prepareStatement("SELECT * FROM login WHERE accid = ? AND accpass = ?");
-        checkStmt1.setString(1, transferRequest.getAccid1());
-        checkStmt1.setString(2, transferRequest.getAccpass1());
+        checkStmt1.setString(1, payRequest.getAccid1());
+        checkStmt1.setString(2, payRequest.getAccpass1());
         ResultSet rs1 = checkStmt1.executeQuery();
 
         if (!rs1.next()) {
@@ -488,34 +459,33 @@ public Response transfer(TransferRequest transferRequest) {
         }
 
         // Verificar que el segundo accid y accpass sean correctos
-        PreparedStatement checkStmt2 = conn.prepareStatement("SELECT * FROM login WHERE accid = ? AND accpass = ?");
-        checkStmt2.setString(1, transferRequest.getAccid2());
-        checkStmt2.setString(2, transferRequest.getAccpass2());
+        PreparedStatement checkStmt2 = conn.prepareStatement("SELECT * FROM login WHERE accid = ?");
+        checkStmt2.setString(1, payRequest.getAccid2());
         ResultSet rs2 = checkStmt2.executeQuery();
 
         if (!rs2.next()) {
-            return Response.status(Response.Status.UNAUTHORIZED).entity("ID de cuenta o clave incorrectos para la segunda cuenta.").build();
+            return Response.status(Response.Status.UNAUTHORIZED).entity("ID de cuenta incorrecto para la segunda cuenta.").build();
         }
 
-        // Verificar el saldo disponible en la cuenta del segundo accid
+        // Verificar el saldo disponible en la cuenta del primer accid
         PreparedStatement balanceStmt = conn.prepareStatement("SELECT balance FROM account_balance WHERE accid = ?");
-        balanceStmt.setString(1, transferRequest.getAccid2());
+        balanceStmt.setString(1, payRequest.getAccid1());
         ResultSet balanceRs = balanceStmt.executeQuery();
 
         if (balanceRs.next()) {
             double currentBalance = balanceRs.getDouble("balance");
-            if (currentBalance < transferRequest.getMount()) {
-                return Response.status(Response.Status.BAD_REQUEST).entity("Saldo insuficiente para realizar la transferencia.").build();
+            if (currentBalance < payRequest.getMount()) {
+                return Response.status(Response.Status.BAD_REQUEST).entity("Saldo insuficiente en la primera cuenta para realizar el pago a la segunda cuenta.").build();
             }
         } else {
             return Response.status(Response.Status.NOT_FOUND).entity("Cuenta de destino no encontrada.").build();
         }
 
         // Actualizar el saldo en account_balance para el primer accid
-        String updateBalanceSql1 = "UPDATE account_balance SET balance = balance + ? WHERE accid = ?";
+        String updateBalanceSql1 = "UPDATE account_balance SET balance = balance - ? WHERE accid = ?";
         try (PreparedStatement updateBalanceStmt1 = conn.prepareStatement(updateBalanceSql1)) {
-            updateBalanceStmt1.setDouble(1, transferRequest.getMount());
-            updateBalanceStmt1.setString(2, transferRequest.getAccid1());
+            updateBalanceStmt1.setDouble(1, payRequest.getMount());
+            updateBalanceStmt1.setString(2, payRequest.getAccid1());
             updateBalanceStmt1.executeUpdate();
         }
 
@@ -523,19 +493,19 @@ public Response transfer(TransferRequest transferRequest) {
         String insertTransactionSql1 = "INSERT INTO transactions (accid, date, hour, mount, type) VALUES (?, ?, ?, ?, ?)";
         try (PreparedStatement insertTransactionStmt1 = conn.prepareStatement(insertTransactionSql1)) {
             LocalDateTime now = LocalDateTime.now();
-            insertTransactionStmt1.setString(1, transferRequest.getAccid1());
+            insertTransactionStmt1.setString(1, payRequest.getAccid1());
             insertTransactionStmt1.setString(2, now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
             insertTransactionStmt1.setString(3, now.format(DateTimeFormatter.ofPattern("HH:mm:ss")));
-            insertTransactionStmt1.setDouble(4, transferRequest.getMount());
-            insertTransactionStmt1.setString(5, "deposit");
+            insertTransactionStmt1.setDouble(4, payRequest.getMount());
+            insertTransactionStmt1.setString(5, "charge");
             insertTransactionStmt1.executeUpdate();
         }
 
         // Actualizar el saldo en account_balance para el segundo accid
-        String updateBalanceSql2 = "UPDATE account_balance SET balance = balance - ? WHERE accid = ?";
+        String updateBalanceSql2 = "UPDATE account_balance SET balance = balance + ? WHERE accid = ?";
         try (PreparedStatement updateBalanceStmt2 = conn.prepareStatement(updateBalanceSql2)) {
-            updateBalanceStmt2.setDouble(1, transferRequest.getMount());
-            updateBalanceStmt2.setString(2, transferRequest.getAccid2());
+            updateBalanceStmt2.setDouble(1, payRequest.getMount());
+            updateBalanceStmt2.setString(2, payRequest.getAccid2());
             updateBalanceStmt2.executeUpdate();
         }
 
@@ -543,29 +513,28 @@ public Response transfer(TransferRequest transferRequest) {
         String insertTransactionSql2 = "INSERT INTO transactions (accid, date, hour, mount, type) VALUES (?, ?, ?, ?, ?)";
         try (PreparedStatement insertTransactionStmt2 = conn.prepareStatement(insertTransactionSql2)) {
             LocalDateTime now = LocalDateTime .now();
-            insertTransactionStmt2.setString(1, transferRequest.getAccid2());
+            insertTransactionStmt2.setString(1, payRequest.getAccid2());
             insertTransactionStmt2.setString(2, now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
             insertTransactionStmt2.setString(3, now.format(DateTimeFormatter.ofPattern("HH:mm:ss")));
-            insertTransactionStmt2.setDouble(4, transferRequest.getMount());
-            insertTransactionStmt2.setString(5, "charge");
+            insertTransactionStmt2.setDouble(4, payRequest.getMount());
+            insertTransactionStmt2.setString(5, "deposit");
             insertTransactionStmt2.executeUpdate();
         }
 
-        // Confirmar la transacción
-        return Response.ok("Transferencia realizada con éxito.").build();
+        // Confirmar el pago
+        return Response.ok("Pago de la primera cuenta hacia la segunda cuenta realizado con éxito").build();
 
     } catch (SQLException e) {
         e.printStackTrace();
-        return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity("Error en la base de datos.").build();
+        return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity("Error en la base de datos. " + e.getMessage()).build();
     }
 }
 
     // Clase para representar la solicitud de transferencia
-    public static class TransferRequest {
+    public static class PayRequest {
         private String accid1;
         private String accpass1;
         private String accid2;
-        private String accpass2;
         private double mount;
 
         public String getAccid1() {
@@ -590,14 +559,6 @@ public Response transfer(TransferRequest transferRequest) {
 
         public void setAccid2(String accid2) {
             this.accid2 = accid2;
-        }
-
-        public String getAccpass2() {
-            return accpass2;
-        }
-
-        public void setAccpass2(String accpass2) {
-            this.accpass2 = accpass2;
         }
 
         public double getMount() {
