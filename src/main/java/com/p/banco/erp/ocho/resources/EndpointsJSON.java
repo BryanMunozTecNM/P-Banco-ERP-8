@@ -50,12 +50,12 @@ public class EndpointsJSON {
         return Response.ok(message).build();
     }
 
-//TODO PRUEBA PERSONAL
+//TODO SALDOS
     
     @GET
-    @Path("get/saldo/todo")  
+    @Path("/balances")  
     @Produces(MediaType.APPLICATION_JSON)
-    public Response getSaldoTodo() {
+    public Response getBalances() {
         List<Account> accounts = new ArrayList<>();
         String sql = "SELECT * FROM account_balance"; 
 
@@ -75,7 +75,36 @@ public class EndpointsJSON {
 
         return Response.ok(accounts).build();
     }
-  
+
+//TODO Transacciones
+    
+@GET
+@Path("/transactions")  
+@Produces(MediaType.APPLICATION_JSON)
+public Response getTransactions() {
+    List<Transaction> transactions = new ArrayList<>();
+    String sql = "SELECT * FROM transactions"; 
+
+    try (Connection conn = connect();
+         PreparedStatement stmt = conn.prepareStatement(sql);
+         ResultSet rs = stmt.executeQuery()) {
+
+        while (rs.next()) {
+            Transaction transaction = new Transaction();
+            transaction.setAccid(rs.getString("accid")); 
+            transaction.setDate(rs.getString("date")); 
+            transaction.setHour(rs.getString("hour")); 
+            transaction.setMount(rs.getDouble("mount")); 
+            transaction.setType(rs.getString("type")); 
+            transactions.add(transaction);
+        }
+    } catch (SQLException e) {
+        return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(e.getMessage()).build();
+    }
+
+    return Response.ok(transactions).build();
+}
+    
     // Endpoint para registrar una nueva cuenta
     @POST
     @Path("register")
@@ -125,10 +154,10 @@ public class EndpointsJSON {
 
     // Endpoint para obtener la información de la cuenta (saldo y transacciones)
     @GET
-    @Path("get/account/{accid}")
+    @Path("/{accid}")
     @Produces(MediaType.APPLICATION_JSON)
-    public Response getAccountInfo(@PathParam("accid") String accid) {
-        AccountInfo accountInfo = new AccountInfo();
+    public Response getAccidSaldo(@PathParam("accid") String accid) {
+        AccidSaldo accidSaldo = new AccidSaldo();
         try (Connection conn = connect()) {
             // Obtener el saldo total
             PreparedStatement balanceStmt = conn.prepareStatement("SELECT balance FROM account_balance WHERE accid = ?");
@@ -136,8 +165,8 @@ public class EndpointsJSON {
             ResultSet balanceRs = balanceStmt.executeQuery();
 
             if (balanceRs.next()) {
-                accountInfo.setAccid(accid);
-                accountInfo.setBalance(balanceRs.getDouble("balance"));
+                accidSaldo.setAccid(accid);
+                accidSaldo.setBalance(balanceRs.getDouble("balance"));
             } else {
                 return Response.status(Response.Status.NOT_FOUND).entity("Cuenta no encontrada.").build();
             }
@@ -156,16 +185,16 @@ public class EndpointsJSON {
                 transaction.setType(transactionRs.getString("type"));
                 transactions.add(transaction);
             }
-            accountInfo.setTransactions(transactions);
+            accidSaldo.setTransactions(transactions);
 
-            return Response.ok(accountInfo).build();
+            return Response.ok(accidSaldo).build();
         } catch (SQLException e) {
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(e.getMessage()).build();
         }
     }
 
     // Clase para representar la información de la cuenta
-    public static class AccountInfo {
+    public static class AccidSaldo {
         private String accid;
         private double balance;
         private List<Transaction> transactions;
@@ -197,10 +226,19 @@ public class EndpointsJSON {
 
     // Clase para representar una transacción
     public static class Transaction {
+        private String accid;
         private String date;
         private String hour;
         private double mount;
         private String type;
+
+        public String getAccid() {
+            return accid;
+        }
+    
+        public void setAccid(String accid) {
+            this.accid = accid;
+        }        
 
         public String getDate() {
             return date;
@@ -455,7 +493,7 @@ public Response pay(PayRequest payRequest) {
         ResultSet rs1 = checkStmt1.executeQuery();
 
         if (!rs1.next()) {
-            return Response.status(Response.Status.UNAUTHORIZED).entity("ID de cuenta o clave incorrectos para la primera cuenta.").build();
+            return Response.status(Response.Status.UNAUTHORIZED).entity("ID de cuenta o clave incorrectos de ACCID1.").build();
         }
 
         // Verificar que el segundo accid y accpass sean correctos
@@ -475,7 +513,7 @@ public Response pay(PayRequest payRequest) {
         if (balanceRs.next()) {
             double currentBalance = balanceRs.getDouble("balance");
             if (currentBalance < payRequest.getMount()) {
-                return Response.status(Response.Status.BAD_REQUEST).entity("Saldo insuficiente en la primera cuenta para realizar el pago a la segunda cuenta.").build();
+                return Response.status(Response.Status.BAD_REQUEST).entity("Saldo insuficiente en ACCID1 para realizar el pago hacia ACCID2.").build();
             }
         } else {
             return Response.status(Response.Status.NOT_FOUND).entity("Cuenta de destino no encontrada.").build();
@@ -522,7 +560,7 @@ public Response pay(PayRequest payRequest) {
         }
 
         // Confirmar el pago
-        return Response.ok("Pago de la primera cuenta hacia la segunda cuenta realizado con éxito").build();
+        return Response.ok("Pago de ACCID1 hacia ACCID2 realizado con éxito.").build();
 
     } catch (SQLException e) {
         e.printStackTrace();
