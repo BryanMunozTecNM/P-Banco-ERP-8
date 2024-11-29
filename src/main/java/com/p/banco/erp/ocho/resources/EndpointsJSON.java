@@ -103,8 +103,8 @@ public class EndpointsJSON {
         }
 
         return Response.ok(account).build();
-    }        
-
+    }       
+    
     // Endpoint para registrar una nueva cuenta
     @POST
     @Path("register")
@@ -134,34 +134,137 @@ public class EndpointsJSON {
             // Insertar en la tabla account_balance con saldo inicial de 0
             PreparedStatement insertBalanceStmt = conn.prepareStatement("INSERT INTO account_balance (accid, balance) VALUES (?, ?)");
             insertBalanceStmt.setString(1, account.getAccid());
-            insertBalanceStmt.setDouble(2, 0.00);
+            insertBalanceStmt.setDouble(2, 0);
             insertBalanceStmt.executeUpdate();
 
-            // Registrar la transacción en la tabla transactions
-            LocalDateTime now = LocalDateTime.now();
-            DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyy/MM/dd");
-            DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss");
-            String date = dateFormatter.format(now);
-            String hour = timeFormatter.format(now);
-
-            PreparedStatement insertTransactionStmt = conn.prepareStatement(
-                    "INSERT INTO transactions (accid, date, hour, mount, type) VALUES (?, ?, ?, ?, ?)");
+            // Registrar la transacción en la tabla de historial
+            PreparedStatement insertTransactionStmt = conn.prepareStatement("INSERT INTO transactions (accid, date, hour, mount, type) VALUES (?, ?, ?, ?, ?)");
             insertTransactionStmt.setString(1, account.getAccid());
-            insertTransactionStmt.setString(2, date);
-            insertTransactionStmt.setString(3, hour);
-            insertTransactionStmt.setDouble(4, 0.00); // Monto de 0.00
+            insertTransactionStmt.setString(2, LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
+            insertTransactionStmt.setString(3, LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss")));
+            insertTransactionStmt.setDouble(4, 0);
             insertTransactionStmt.setString(5, "register");
             insertTransactionStmt.executeUpdate();
 
-            // Devolver una respuesta exitosa
-            return Response.ok("Registro realizado exitosamente.").build();
-        } catch (SQLException ex) {
-            ex.printStackTrace();
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity("Error en la base de datos: " + ex.getMessage()).build();
+            return Response.status(Response.Status.CREATED).entity(account).build();
+        } catch (SQLException e) {
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(e.getMessage()).build();
         }
     }
 
-    // Clase interna para representar la entidad Account
+    // Endpoint para obtener la información de la cuenta (saldo y transacciones)
+    @GET
+    @Path("get/account/{accid}")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response getAccountInfo(@PathParam("accid") String accid) {
+        AccountInfo accountInfo = new AccountInfo();
+        try (Connection conn = connect()) {
+            // Obtener el saldo total
+            PreparedStatement balanceStmt = conn.prepareStatement("SELECT balance FROM account_balance WHERE accid = ?");
+            balanceStmt.setString(1, accid);
+            ResultSet balanceRs = balanceStmt.executeQuery();
+
+            if (balanceRs.next()) {
+                accountInfo.setAccid(accid);
+                accountInfo.setBalance(balanceRs.getDouble("balance"));
+            } else {
+                return Response.status(Response.Status.NOT_FOUND).entity("Cuenta no encontrada.").build();
+            }
+
+            // Obtener el historial de transacciones
+            List<Transaction> transactions = new ArrayList<>();
+            PreparedStatement transactionStmt = conn.prepareStatement("SELECT * FROM transactions WHERE accid = ?");
+            transactionStmt.setString(1, accid);
+            ResultSet transactionRs = transactionStmt.executeQuery();
+
+            while (transactionRs.next()) {
+                Transaction transaction = new Transaction();
+                transaction.setDate(transactionRs.getString("date"));
+                transaction.setHour(transactionRs.getString("hour"));
+                transaction.setMount(transactionRs.getDouble("mount"));
+                transaction.setType(transactionRs.getString("type"));
+                transactions.add(transaction);
+            }
+            accountInfo.setTransactions(transactions);
+
+            return Response.ok(accountInfo).build();
+        } catch (SQLException e) {
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(e.getMessage()).build();
+        }
+    }
+
+    // Clase para representar la información de la cuenta
+    public static class AccountInfo {
+        private String accid;
+        private double balance;
+        private List<Transaction> transactions;
+
+        public String getAccid() {
+            return accid;
+        }
+
+        public void setAccid(String accid) {
+            this.accid = accid;
+        }
+
+        public double getBalance() {
+            return balance;
+        }
+
+        public void setBalance(double balance) {
+            this.balance = balance;
+        }
+
+        public List<Transaction> getTransactions() {
+            return transactions;
+        }
+
+        public void setTransactions(List<Transaction> transactions) {
+            this.transactions = transactions;
+        }
+    }
+
+    // Clase para representar una transacción
+    public static class Transaction {
+        private String date;
+        private String hour;
+        private double mount;
+        private String type;
+
+        public String getDate() {
+            return date;
+        }
+
+        public void setDate(String date) {
+            this.date = date;
+        }
+
+        public String getHour() {
+            return hour;
+        }
+
+        public void setHour(String hour) {
+            this.hour = hour;
+        }
+
+        public double getMount() {
+            return mount;
+        }
+
+        public void setMount(double mount) {
+            this.mount = mount;
+        }
+
+        public String getType() {
+            return type;
+        }
+
+        public void setType(String type) {
+            this.type = type;
+        }
+    }
+
+    // Clase para representar una cuenta
     public static class Account {
         private String accid;
         private String accpass;
@@ -192,185 +295,59 @@ public class EndpointsJSON {
         }
     }
 
-    // Método para iniciar sesión
-    @POST
-    @Path("login")
-    @Consumes(MediaType.APPLICATION_JSON)
-    @Produces(MediaType.APPLICATION_JSON)
-    public Response loginUser (UserCredentials credentials) {
-        try (Connection conn = connect()) {
-            PreparedStatement pst = conn.prepareStatement("SELECT * FROM login WHERE accid = ? AND accpass = ?");
-            pst.setString(1, credentials.getAccid());
-            pst.setString(2, credentials.getAccpass());
-            ResultSet rs = pst.executeQuery();
-
-            if (rs.next()) {
-                // Si las credenciales son válidas, devolver el accid
-                String accid = rs.getString("accid");
-                return Response.ok().entity("{\"message\": \"Inicio de sesión exitoso.\", \"accid\": \"" + accid + "\"}").build();
-            } else {
-                return Response.status(Response.Status.UNAUTHORIZED).entity("ID de cuenta y/o clave no válidos.").build();
-            }
-        } catch (SQLException ex) {
-            ex.printStackTrace();
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity("Error en la base de datos: " + ex.getMessage()).build();
-        }
-    }
-
-    // Obtener información de la cuenta
-    @GET
-    @Path("account/{accid}")
-    @Produces(MediaType.APPLICATION_JSON)
-    public Response getAccountInfo(@PathParam("accid") String accid) {
-        double totalBalance = 0.0;
-
-        try (Connection conn = connect()) {
-            PreparedStatement pst = conn.prepareStatement("SELECT balance FROM account_balance WHERE accid = ?");
-            pst.setString(1, accid);
-            ResultSet rs = pst.executeQuery();
-
-            if (rs.next()) {
-                totalBalance = rs.getDouble("balance");
-            } else {
-                return Response.status(Response.Status.NOT_FOUND).entity("No se encontró información de saldo para el ID de cuenta proporcionado.").build();
-            }
-
-            return Response.ok("{\"accid\": \"" + accid + "\", \"totalBalance\": " + totalBalance + "}").build();
-        } catch (SQLException ex) {
-            ex.printStackTrace();
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity("Error en la base de datos: " + ex.getMessage()).build();
-        }
-    }
-
-    // Realizar un depósito
+    // Endpoint para realizar un depósito
     @POST
     @Path("deposit")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
     public Response deposit(DepositRequest depositRequest) {
-        double monto = depositRequest.getMonto();
-        String accid = depositRequest.getAccid();
-
-        if (monto < 0) {
-            return Response.status(Response.Status.BAD_REQUEST).entity("El valor debe ser mayor o igual que 0.").build();
+        // Validar que el monto sea un número mayor o igual a 0
+        if (depositRequest.getMount() < 0) {
+            return Response.status(Response.Status.BAD_REQUEST).entity("El monto debe ser mayor o igual a 0.").build();
         }
 
         try (Connection conn = connect()) {
-            // Actualizar el saldo
-            PreparedStatement pst = conn.prepareStatement("UPDATE account_balance SET balance = balance + ? WHERE accid = ?");
-            pst.setDouble(1, monto);
-            pst.setString(2, accid);
-            int rowsAffected = pst.executeUpdate();
+            // Verificar que el accid y accpass sean correctos
+            PreparedStatement checkStmt = conn.prepareStatement("SELECT * FROM login WHERE accid = ? AND accpass = ?");
+            checkStmt.setString(1, depositRequest.getAccid());
+            checkStmt.setString(2, depositRequest.getAccpass());
+            ResultSet rs = checkStmt.executeQuery();
 
-            if (rowsAffected > 0) {
-                // Registrar la transacción
+            if (!rs.next()) {
+                return Response.status(Response.Status.UNAUTHORIZED).entity("ID de cuenta o clave incorrectos.").build();
+            }
+
+            // Actualizar el saldo en account_balance
+            String updateBalanceSql = "UPDATE account_balance SET balance = balance + ? WHERE accid = ?";
+            try (PreparedStatement updateBalanceStmt = conn.prepareStatement(updateBalanceSql)) {
+                updateBalanceStmt.setDouble(1, depositRequest.getMount());
+                updateBalanceStmt.setString(2, depositRequest.getAccid());
+                updateBalanceStmt.executeUpdate();
+            }
+
+            // Registrar la transacción en transactions
+            String insertTransactionSql = "INSERT INTO transactions (accid, date, hour, mount, type) VALUES (?, ?, ?, ?, ?)";
+            try (PreparedStatement insertTransactionStmt = conn.prepareStatement(insertTransactionSql)) {
                 LocalDateTime now = LocalDateTime.now();
-                DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyy/MM/dd");
-                DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss");
-                PreparedStatement logPst = conn.prepareStatement("INSERT INTO transaction_history (accid, amount, transaction_type, date, time) VALUES (?, ?, ?, ?, ?)");
-                logPst.setString(1, accid);
-                logPst.setDouble(2, monto);
-                logPst.setString(3, "Depósito");
-                logPst.setString(4, now.format(dateFormatter));
-                logPst.setString(5, now.format(timeFormatter));
-                logPst.executeUpdate();
-
-                return Response.ok("{\"message\": \"Depósito realizado con éxito.\"}").build();
-            } else {
-                return Response.status(Response.Status.NOT_FOUND).entity("No se encontró la cuenta para el ID proporcionado.").build();
+                insertTransactionStmt.setString(1, depositRequest.getAccid());
+                insertTransactionStmt.setString(2, now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
+                insertTransactionStmt.setString(3, now.format(DateTimeFormatter.ofPattern("HH:mm:ss")));
+                insertTransactionStmt.setDouble(4, depositRequest.getMount());
+                insertTransactionStmt.setString(5, "deposit");
+                insertTransactionStmt.executeUpdate();
             }
-        } catch (SQLException ex) {
-            ex.printStackTrace();
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity("Error en la base de datos: " + ex.getMessage()).build();
+
+            return Response.ok("Depósito realizado con éxito.").build();
+        } catch (SQLException e) {
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(e.getMessage()).build();
         }
     }
 
-    // Realizar un cargo
-    @POST
-    @Path("charge")
-    @Consumes(MediaType.APPLICATION_JSON)
-    @Produces(MediaType.APPLICATION_JSON)
-    public Response charge(ChargeRequest chargeRequest) {
-        double monto = chargeRequest.getMonto();
-        String accid = chargeRequest.getAccid();
-
-        if (monto < 0) {
-            return Response.status(Response.Status.BAD_REQUEST).entity("El valor debe ser mayor o igual que 0.").build();
-        }
-
-        try (Connection conn = connect()) {
-            // Verificar el saldo antes de realizar el cargo
-            PreparedStatement balancePst = conn.prepareStatement("SELECT balance FROM account_balance WHERE accid = ?");
-            balancePst.setString(1, accid);
-            ResultSet rs = balancePst.executeQuery();
-
-            if (rs.next()) {
-                double currentBalance = rs.getDouble("balance");
-                if (currentBalance < monto) {
-                    return Response.status(Response.Status.BAD_REQUEST).entity("Saldo insuficiente para realizar el cargo.").build();
-                }
-
-                // Actualizar el saldo
-                PreparedStatement pst = conn.prepareStatement("UPDATE account_balance SET balance = balance - ? WHERE accid = ?");
-                pst.setDouble(1, monto);
-                pst.setString(2, accid);
-                pst.executeUpdate();
-
-                // Registrar la transacción
-                LocalDateTime now = LocalDateTime.now();
-                DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyy/MM/dd");
-                DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss");
-                PreparedStatement logPst = conn.prepareStatement("INSERT INTO transaction_history (accid, amount, transaction_type, date, time) VALUES (?, ?, ?, ?, ?)");
-                logPst.setString(1, accid);
-                logPst.setDouble(2, monto);
-                logPst.setString(3, "Cargo");
-                logPst.setString(4, now.format(dateFormatter));
-                logPst.setString(5, now.format(timeFormatter));
-                logPst.executeUpdate();
-
-                return Response.ok("{\"message\": \"Cargo realizado con éxito.\"}").build();
-            } else {
-                return Response.status(Response.Status.NOT_FOUND).entity("No se encontró la cuenta para el ID proporcionado.").build();
-            }
-        } catch (SQLException ex) {
-            ex.printStackTrace();
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity("Error en la base de datos: " + ex.getMessage()).build();
-        }
-    }
-
-    // Obtener historial de transacciones
-    @GET
-    @Path("transactions/{accid}")
-    @Produces(MediaType.APPLICATION_JSON)
-    public Response getTransactionHistory(@PathParam("accid") String accid) {
-        List<Transaction> transactions = new ArrayList<>();
-
-        try (Connection conn = connect()) {
-            PreparedStatement pst = conn.prepareStatement("SELECT * FROM transaction_history WHERE accid = ? ORDER BY date DESC, time DESC");
-            pst.setString(1, accid);
-            ResultSet rs = pst.executeQuery();
-
-            while (rs.next()) {
-                Transaction transaction = new Transaction();
-                transaction.setAccid(rs.getString("accid"));
-                transaction.setAmount(rs.getDouble("amount"));
-                transaction.setTransactionType(rs.getString("transaction_type"));
-                transaction.setDate(rs.getString("date"));
-                transaction.setTime(rs.getString("time"));
-                transactions.add(transaction);
-            }
-
-            return Response.ok(transactions).build();
-        } catch (SQLException ex) {
-            ex.printStackTrace();
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity("Error en la base de datos: " + ex.getMessage()).build();
-        }
-    }
-
-    // Clases internas para representar las solicitudes y transacciones
-    public static class UserCredentials {
+    // Clase para representar la solicitud de depósito
+    public static class DepositRequest {
         private String accid;
- private String accpass;
+        private String accpass;
+        private double mount;
 
         public String getAccid() {
             return accid;
@@ -387,32 +364,81 @@ public class EndpointsJSON {
         public void setAccpass(String accpass) {
             this.accpass = accpass;
         }
-    }
 
-    public static class DepositRequest {
-        private String accid;
-        private double monto;
-
-        public String getAccid() {
-            return accid;
+        public double getMount() {
+            return mount;
         }
 
-        public void setAccid(String accid) {
-            this.accid = accid;
-        }
-
-        public double getMonto() {
-            return monto;
-        }
-
-        public void setMonto(double monto) {
-            this.monto = monto;
+        public void setMount(double mount) {
+            this.mount = mount;
         }
     }
 
+    // Endpoint para realizar un cargo
+    @POST
+    @Path("charge")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response charge(ChargeRequest chargeRequest) {
+        // Validar que el monto sea un número mayor o igual a 0
+        if (chargeRequest.getMount() < 0) {
+            return Response.status(Response.Status.BAD_REQUEST).entity("El monto debe ser mayor o igual a 0.").build();
+        }
+
+        try (Connection conn = connect()) {
+            // Verificar que el accid y accpass sean correctos
+            PreparedStatement checkStmt = conn.prepareStatement("SELECT * FROM login WHERE accid = ? AND accpass = ?");
+            checkStmt.setString(1, chargeRequest.getAccid());
+            checkStmt.setString(2, chargeRequest.getAccpass());
+            ResultSet rs = checkStmt.executeQuery();
+
+            if (!rs.next()) {
+                return Response.status(Response.Status.UNAUTHORIZED).entity("ID de cuenta o clave incorrectos.").build();
+            }
+
+            // Verificar el saldo disponible
+            PreparedStatement balanceStmt = conn.prepareStatement("SELECT balance FROM account_balance WHERE accid = ?");
+            balanceStmt.setString(1, chargeRequest.getAccid());
+            ResultSet balanceRs = balanceStmt.executeQuery();
+
+            if (balanceRs.next()) {
+                double currentBalance = balanceRs.getDouble("balance");
+                if (currentBalance < chargeRequest.getMount()) {
+                    return Response.status(Response.Status.BAD_REQUEST).entity("Saldo insuficiente para realizar el cargo.").build();
+                }
+            }
+
+            // Actualizar el saldo en account_balance
+            String updateBalanceSql = "UPDATE account_balance SET balance = balance - ? WHERE accid = ?";
+            try (PreparedStatement updateBalanceStmt = conn.prepareStatement(updateBalanceSql)) {
+                updateBalanceStmt.setDouble(1, chargeRequest.getMount());
+                updateBalanceStmt.setString(2, chargeRequest.getAccid());
+                updateBalanceStmt.executeUpdate();
+            }
+
+            // Registrar la transacción en transactions
+            String insertTransactionSql = "INSERT INTO transactions (accid, date, hour, mount, type) VALUES (?, ?, ?, ?, ?)";
+            try (PreparedStatement insertTransactionStmt = conn.prepareStatement(insertTransactionSql)) {
+                LocalDateTime now = LocalDateTime.now();
+                insertTransactionStmt.setString(1, chargeRequest.getAccid());
+                insertTransactionStmt.setString(2, now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
+                insertTransactionStmt.setString(3, now.format(DateTimeFormatter.ofPattern("HH:mm:ss")));
+                insertTransactionStmt.setDouble(4, chargeRequest.getMount());
+                insertTransactionStmt.setString(5, "charge");
+                insertTransactionStmt.executeUpdate();
+            }
+
+            return Response.ok("Cargo realizado con éxito.").build();
+        } catch (SQLException e) {
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(e.getMessage()).build();
+        }
+    }
+
+    // Clase para representar la solicitud de cargo
     public static class ChargeRequest {
         private String accid;
-        private double monto;
+        private String accpass;
+        private double mount;
 
         public String getAccid() {
             return accid;
@@ -422,60 +448,165 @@ public class EndpointsJSON {
             this.accid = accid;
         }
 
-        public double getMonto() {
-            return monto;
+        public String getAccpass() {
+            return accpass;
         }
 
-        public void setMonto(double monto) {
-            this.monto = monto;
+        public void setAccpass(String accpass) {
+            this.accpass = accpass;
+        }
+
+        public double getMount() {
+            return mount;
+        }
+
+        public void setMount(double mount) {
+            this.mount = mount;
+        }
+    }
+
+// Endpoint para realizar un depósito y cargo simultáneamente
+@POST
+@Path("transfer")
+@Consumes(MediaType.APPLICATION_JSON)
+@Produces(MediaType.APPLICATION_JSON)
+public Response transfer(TransferRequest transferRequest) {
+    // Validar que el monto sea un número mayor o igual a 0
+    if (transferRequest.getMount() < 0) {
+        return Response.status(Response.Status.BAD_REQUEST).entity("El monto debe ser mayor o igual a 0.").build();
+    }
+
+    try (Connection conn = connect()) {
+        // Verificar que el primer accid y accpass sean correctos
+        PreparedStatement checkStmt1 = conn.prepareStatement("SELECT * FROM login WHERE accid = ? AND accpass = ?");
+        checkStmt1.setString(1, transferRequest.getAccid1());
+        checkStmt1.setString(2, transferRequest.getAccpass1());
+        ResultSet rs1 = checkStmt1.executeQuery();
+
+        if (!rs1.next()) {
+            return Response.status(Response.Status.UNAUTHORIZED).entity("ID de cuenta o clave incorrectos para la primera cuenta.").build();
+        }
+
+        // Verificar que el segundo accid y accpass sean correctos
+        PreparedStatement checkStmt2 = conn.prepareStatement("SELECT * FROM login WHERE accid = ? AND accpass = ?");
+        checkStmt2.setString(1, transferRequest.getAccid2());
+        checkStmt2.setString(2, transferRequest.getAccpass2());
+        ResultSet rs2 = checkStmt2.executeQuery();
+
+        if (!rs2.next()) {
+            return Response.status(Response.Status.UNAUTHORIZED).entity("ID de cuenta o clave incorrectos para la segunda cuenta.").build();
+        }
+
+        // Verificar el saldo disponible en la cuenta del segundo accid
+        PreparedStatement balanceStmt = conn.prepareStatement("SELECT balance FROM account_balance WHERE accid = ?");
+        balanceStmt.setString(1, transferRequest.getAccid2());
+        ResultSet balanceRs = balanceStmt.executeQuery();
+
+        if (balanceRs.next()) {
+            double currentBalance = balanceRs.getDouble("balance");
+            if (currentBalance < transferRequest.getMount()) {
+                return Response.status(Response.Status.BAD_REQUEST).entity("Saldo insuficiente para realizar la transferencia.").build();
+            }
+        } else {
+            return Response.status(Response.Status.NOT_FOUND).entity("Cuenta de destino no encontrada.").build();
+        }
+
+        // Actualizar el saldo en account_balance para el primer accid
+        String updateBalanceSql1 = "UPDATE account_balance SET balance = balance + ? WHERE accid = ?";
+        try (PreparedStatement updateBalanceStmt1 = conn.prepareStatement(updateBalanceSql1)) {
+            updateBalanceStmt1.setDouble(1, transferRequest.getMount());
+            updateBalanceStmt1.setString(2, transferRequest.getAccid1());
+            updateBalanceStmt1.executeUpdate();
+        }
+
+        // Registrar la transacción en transactions para el primer accid
+        String insertTransactionSql1 = "INSERT INTO transactions (accid, date, hour, mount, type) VALUES (?, ?, ?, ?, ?)";
+        try (PreparedStatement insertTransactionStmt1 = conn.prepareStatement(insertTransactionSql1)) {
+            LocalDateTime now = LocalDateTime.now();
+            insertTransactionStmt1.setString(1, transferRequest.getAccid1());
+            insertTransactionStmt1.setString(2, now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
+            insertTransactionStmt1.setString(3, now.format(DateTimeFormatter.ofPattern("HH:mm:ss")));
+            insertTransactionStmt1.setDouble(4, transferRequest.getMount());
+            insertTransactionStmt1.setString(5, "deposit");
+            insertTransactionStmt1.executeUpdate();
+        }
+
+        // Actualizar el saldo en account_balance para el segundo accid
+        String updateBalanceSql2 = "UPDATE account_balance SET balance = balance - ? WHERE accid = ?";
+        try (PreparedStatement updateBalanceStmt2 = conn.prepareStatement(updateBalanceSql2)) {
+            updateBalanceStmt2.setDouble(1, transferRequest.getMount());
+            updateBalanceStmt2.setString(2, transferRequest.getAccid2());
+            updateBalanceStmt2.executeUpdate();
+        }
+
+        // Registrar la transacción en transactions para el segundo accid
+        String insertTransactionSql2 = "INSERT INTO transactions (accid, date, hour, mount, type) VALUES (?, ?, ?, ?, ?)";
+        try (PreparedStatement insertTransactionStmt2 = conn.prepareStatement(insertTransactionSql2)) {
+            LocalDateTime now = LocalDateTime .now();
+            insertTransactionStmt2.setString(1, transferRequest.getAccid2());
+            insertTransactionStmt2.setString(2, now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
+            insertTransactionStmt2.setString(3, now.format(DateTimeFormatter.ofPattern("HH:mm:ss")));
+            insertTransactionStmt2.setDouble(4, transferRequest.getMount());
+            insertTransactionStmt2.setString(5, "charge");
+            insertTransactionStmt2.executeUpdate();
+        }
+
+        // Confirmar la transacción
+        return Response.ok("Transferencia realizada con éxito.").build();
+
+    } catch (SQLException e) {
+        e.printStackTrace();
+        return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity("Error en la base de datos.").build();
+    }
+}
+
+    // Clase para representar la solicitud de transferencia
+    public static class TransferRequest {
+        private String accid1;
+        private String accpass1;
+        private String accid2;
+        private String accpass2;
+        private double mount;
+
+        public String getAccid1() {
+            return accid1;
+        }
+
+        public void setAccid1(String accid1) {
+            this.accid1 = accid1;
+        }
+
+        public String getAccpass1() {
+            return accpass1;
+        }
+
+        public void setAccpass1(String accpass1) {
+            this.accpass1 = accpass1;
+        }
+
+        public String getAccid2() {
+            return accid2;
+        }
+
+        public void setAccid2(String accid2) {
+            this.accid2 = accid2;
+        }
+
+        public String getAccpass2() {
+            return accpass2;
+        }
+
+        public void setAccpass2(String accpass2) {
+            this.accpass2 = accpass2;
+        }
+
+        public double getMount() {
+            return mount;
+        }
+
+        public void setMount(double mount) {
+            this.mount = mount;
         }
     }
 
-    public static class Transaction {
-        private String accid;
-        private double amount;
-        private String transactionType;
-        private String date;
-        private String time;
-
-        public String getAccid() {
-            return accid;
-        }
-
-        public void setAccid(String accid) {
-            this.accid = accid;
-        }
-
-        public double getAmount() {
-            return amount;
-        }
-
-        public void setAmount(double amount) {
-            this.amount = amount;
-        }
-
-        public String getTransactionType() {
-            return transactionType;
-        }
-
-        public void setTransactionType(String transactionType) {
-            this.transactionType = transactionType;
-        }
-
-        public String getDate() {
-            return date;
-        }
-
-        public void setDate(String date) {
-            this.date = date;
-        }
-
-        public String getTime() {
-            return time;
-        }
-
-        public void setTime(String time) {
-            this.time = time;
-        }
-    }
 }
